@@ -47,7 +47,8 @@ let selectedCardIndex = [],
     prizes: [], //奖品信息
     users: [], //所有人员
     luckyUsers: {}, //已中奖人员
-    leftUsers: [] //未中奖人员
+    leftUsers: [], //未中奖人员
+    LastLeftUsers: [] //上次未中奖人员，以便在重新抽取时恢复人员池数据
   },
   interval,
   // 当前抽的奖项，从最低奖开始抽，直到抽到大奖
@@ -263,6 +264,8 @@ function bindEvent() {
         saveData();
         //更新剩余抽奖数目的数据显示
         changePrize();
+        //保存上次的人员池，以便重新抽取
+        basicData.LastLeftUsers = Object.assign([], basicData.leftUsers);
         resetCard().then(res => {
           // 抽奖
           lottery();
@@ -278,6 +281,8 @@ function bindEvent() {
         setErrorData(currentLuckys);
         addQipao(`重新抽取[${currentPrize.title}],做好准备`);
         setLotteryStatus(true);
+        //放回此次抽取的人员
+        basicData.leftUsers = Object.assign([], basicData.LastLeftUsers);
         // 重新抽奖则直接进行抽取，不对上一次的抽奖数据进行保存
         // 抽奖
         resetCard().then(res => {
@@ -627,11 +632,15 @@ function lottery() {
       leftCount = basicData.leftUsers.length,
       leftPrizeCount = currentPrize.count - (luckyData ? luckyData.length : 0);
 
-    if (leftCount < perCount) {
-      addQipao("剩余参与抽奖人员不足，现在重新设置所有人员可以进行二次抽奖！");
-      basicData.leftUsers = basicData.users.slice();
-      leftCount = basicData.leftUsers.length;
-    }
+    //如果剩余人员不足本轮抽奖数量，则只抽人员数量的奖，剩余人员为0时，再重置人员池
+      if (leftCount == 0) {
+        addQipao("剩余参与抽奖人员不足，现在重新设置所有人员进行二次抽奖！");
+        basicData.leftUsers = basicData.users.slice();
+        leftCount = basicData.leftUsers.length; 
+    } else if (leftCount < perCount){
+          addQipao("剩余参与抽奖人员不足本轮次，下轮次将重置人员池！");
+          perCount = leftCount;
+      }
 
     for (let i = 0; i < perCount; i++) {
       let luckyId = random(leftCount);
@@ -687,8 +696,22 @@ function saveData() {
 }
 
 function changePrize() {
+  let perCount = EACH_COUNT[currentPrizeIndex],
+      leftCount = basicData.leftUsers.length;
+  let luckyData = basicData.luckyUsers[currentPrize.type],
+      leftPrizeCount = currentPrize.count - (luckyData ? luckyData.length : 0);
+  
   let luckys = basicData.luckyUsers[currentPrize.type];
   let luckyCount = (luckys ? luckys.length : 0) + EACH_COUNT[currentPrizeIndex];
+
+if (leftCount == 0  && leftPrizeCount == perCount) {
+        // 解决最后余数不更新左侧显示的问题
+        luckyCount = luckyCount - basicData.LastLeftUsers.length;
+    } else if (leftCount < perCount && leftCount != 0) {
+        // 如果剩余人数不足本轮奖数，那么只减少本轮人数
+        luckyCount = (luckys ? luckys.length : 0) + leftCount;
+    }
+  
   // 修改左侧prize的数目和百分比
   setPrizeData(currentPrizeIndex, luckyCount);
 }
